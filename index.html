@@ -436,6 +436,57 @@ html, body {
 .spark-pr-lbl { font-family: 'Barlow Condensed', sans-serif; font-size: 23px; color: #555; letter-spacing: .1em; text-align: right; margin-top: -3px; }
 svg.spark { width: 100%; height: 48px; display: block; }
 
+
+/* ── FLEX SESSION BUTTON ── */
+.flex-btn {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; margin: 0 16px 12px;
+  background: #1a0f06; border: 1px solid #3a2010; border-left: 4px solid var(--red);
+  cursor: pointer; width: calc(100% - 32px); text-align: left;
+  transition: background .15s;
+}
+.flex-btn:active { background: #241408; }
+.flex-tag {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 700;
+  letter-spacing: .15em; color: var(--red); text-transform: uppercase;
+  display: block; margin-bottom: 2px;
+}
+.flex-btn-name { font-family: 'Bebas Neue', sans-serif; font-size: 26px; color: var(--text); letter-spacing: .03em; }
+.flex-btn-sub { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; color: var(--muted); margin-top: 2px; }
+.flex-btn-arrow { color: var(--red); font-size: 22px; }
+
+/* ── FLEX SCREEN ── */
+.flex-ex-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background .15s;
+}
+.flex-ex-item:active { background: #1a1a1a; }
+.flex-ex-item.selected { background: #0a1f0e; border-bottom-color: #1a4a22; }
+.flex-ex-left {}
+.flex-ex-name { font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: .02em; }
+.flex-ex-meta { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; color: var(--muted); margin-top: 1px; }
+.flex-ex-check {
+  width: 30px; height: 30px; border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: transparent; font-size: 16px; flex-shrink: 0; transition: all .15s;
+}
+.flex-ex-item.selected .flex-ex-check { background: var(--green); border-color: var(--green); color: var(--text); }
+.flex-start-btn {
+  position: sticky; bottom: calc(68px + var(--safe-bot));
+  margin: 0; width: 100%; padding: 16px;
+  background: var(--red); color: var(--text); border: none;
+  font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: .08em;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.flex-start-btn:disabled { background: #444; cursor: default; }
+.flex-day-label {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 700;
+  letter-spacing: .18em; color: var(--red); text-transform: uppercase;
+  padding: 14px 16px 6px; background: #0d0d0d;
+  border-bottom: 1px solid var(--border); border-top: 1px solid var(--border);
+}
+
 /* ── PICKER ── */
 .picker {
   display: none; position: fixed;
@@ -494,6 +545,14 @@ svg.spark { width: 100%; height: 48px; display: block; }
       </div>
 
       <div class="sec-label">Your Sessions</div>
+      <button class="flex-btn" onclick="showScreen('flex', document.querySelectorAll('.nav-btn')[1])">
+        <div class="flex-btn-left">
+          <span class="flex-tag">Flex Session</span>
+          <div class="flex-btn-name">Pick Your Own Exercises</div>
+          <div class="flex-btn-sub">Mix any day — log what you can</div>
+        </div>
+        <div class="flex-btn-arrow">⚡</div>
+      </button>
       <div id="day-accordions"></div>
 
       <div class="sec-label">Top PRs</div>
@@ -549,6 +608,23 @@ svg.spark { width: 100%; height: 48px; display: block; }
         <div class="wucd-item">Child's pose × 60s</div>
         <div class="wucd-item">Figure-4 glute stretch × 40s each</div>
       </div>
+      <div style="height:14px"></div>
+    </div>
+
+
+    <!-- ═══ FLEX SESSION ═══ -->
+    <div class="screen" id="scr-flex">
+      <div class="top-bar">
+        <div class="top-eye">Build Your Session</div>
+        <div class="top-title">FLEX SESSION</div>
+      </div>
+      <div style="padding:12px 16px 4px;font-family:'Barlow Condensed',sans-serif;font-size:18px;color:#888;line-height:1.5;">
+        Pick 2–6 exercises from any day. Tap to select, tap again to deselect.
+      </div>
+      <div id="flex-ex-list"></div>
+      <button class="flex-start-btn" id="flex-start-btn" onclick="launchFlex()" disabled>
+        ▶ START FLEX SESSION — <span id="flex-count">0</span> EXERCISES
+      </button>
       <div style="height:14px"></div>
     </div>
 
@@ -840,6 +916,7 @@ function showScreen(name, btn) {
   if (name==='hist') renderHist();
   if (name==='prog') renderProg();
   if (name==='wkt' && !S.activeWorkout) launchWorkout(0);
+  if (name==='flex') renderFlexPicker();
 }
 
 // ═══ DASHBOARD ═══
@@ -1113,6 +1190,73 @@ function renderProg() {
     const path=xs.map((x,i)=>(i===0?'M':'L')+x.toFixed(1)+','+ys[i].toFixed(1)).join(' ');
     return`<div class="spark-card"><div class="spark-hd"><div class="spark-nm">${name}</div><div><div class="spark-pr">${pr.w}kg</div><div class="spark-pr-lbl">CURRENT PR</div></div></div><svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${path}" stroke="var(--red)" stroke-width="2" fill="none" stroke-linejoin="round"/>${xs.map((x,i)=>`<circle cx="${x.toFixed(1)}" cy="${ys[i].toFixed(1)}" r="3" fill="var(--red)" opacity=".7"/>`).join('')}</svg></div>`;
   }).join('');
+}
+
+
+// ═══ FLEX SESSION ═══
+let flexSelected = [];
+
+function renderFlexPicker() {
+  flexSelected = [];
+  updateFlexBtn();
+  const el = document.getElementById('flex-ex-list');
+  let html = '';
+  PLANS.forEach(plan => {
+    html += `<div class="flex-day-label">${plan.tag} — ${plan.name}</div>`;
+    plan.exercises.forEach((ex, ei) => {
+      html += `<div class="flex-ex-item" id="fex-${plan.tag}-${ei}" onclick="toggleFlexEx('${plan.tag}', ${ei}, '${ex.name.replace(/'/g,"\\'")}', '${ex.muscle}')">
+        <div class="flex-ex-left">
+          <div class="flex-ex-name">${ex.name}</div>
+          <div class="flex-ex-meta">${ex.muscle} · ${ex.sets}×${ex.reps}</div>
+        </div>
+        <div class="flex-ex-check" id="fchk-${plan.tag}-${ei}">✓</div>
+      </div>`;
+    });
+  });
+  el.innerHTML = html;
+}
+
+function toggleFlexEx(tag, idx, name, muscle) {
+  const itemEl = document.getElementById('fex-' + tag + '-' + idx);
+  const chkEl  = document.getElementById('fchk-' + tag + '-' + idx);
+  const key = tag + '-' + idx;
+  const existing = flexSelected.findIndex(e => e.key === key);
+  if (existing >= 0) {
+    flexSelected.splice(existing, 1);
+    itemEl.classList.remove('selected');
+  } else {
+    // find full exercise data
+    const plan = PLANS.find(p => p.tag === tag);
+    const ex = plan.exercises[idx];
+    flexSelected.push({ key, name, muscle, cue: ex.cue, avoid: ex.avoid, video: ex.video,
+      sets: Array.from({length: ex.sets}, () => ({w:'', r:'', done:false})) });
+    itemEl.classList.add('selected');
+  }
+  updateFlexBtn();
+}
+
+function updateFlexBtn() {
+  const btn = document.getElementById('flex-start-btn');
+  const cnt = document.getElementById('flex-count');
+  cnt.textContent = flexSelected.length;
+  btn.disabled = flexSelected.length < 1;
+}
+
+function launchFlex() {
+  if (!flexSelected.length) return;
+  S.activeWorkout = { idx: -1, name: 'FLEX SESSION', tag: 'Flex' };
+  S.activeExercises = flexSelected.map(e => ({...e, sets: e.sets.map(s => ({...s}))}));
+  S.currentCard = 0;
+  S.timerPaused = false; S.pausedAt = null; S.pauseAccum = 0;
+  if (S.timerIv) clearInterval(S.timerIv);
+  S.timerStart = Date.now();
+  S.timerIv = setInterval(tickTimer, 1000);
+  document.getElementById('w-name').textContent = 'FLEX SESSION';
+  document.getElementById('w-date').textContent = new Date().toLocaleDateString('en-NZ',{weekday:'long',day:'numeric',month:'long'}).toUpperCase();
+  document.getElementById('btn-pause').textContent = '⏸ PAUSE';
+  renderCards();
+  setupSwipe();
+  showScreen('wkt', document.querySelectorAll('.nav-btn')[1]);
 }
 
 // ═══ INIT ═══
