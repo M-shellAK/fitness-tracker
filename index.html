@@ -541,11 +541,14 @@ async function loadRise(force=false) {
   try {
     const now=new Date(); const tMinS=new Date(new Date(now).setHours(0,0,0,0)).toISOString(); const tMaxS=new Date(new Date(now).setHours(23,59,59,999)).toISOString();
     const [dips,peaks,roster] = await Promise.all([fetchCal(CAL_DIPS,tMinS,tMaxS),fetchCal(CAL_PEAKS,tMinS,tMaxS),fetchCal(CAL_ROSTER,tMinS,tMaxS)]);
-    const grog=dips?.find(e=>e.summary?.toLowerCase().includes('groggin'));
-    const dip=dips?.find(e=>e.summary?.toLowerCase().includes('dip')||e.summary?.toLowerCase().includes('afternoon'));
-    const winddown=dips?.find(e=>e.summary?.toLowerCase().includes('wind'));
-    const mainPeak=peaks?.find(e=>!e.summary?.toLowerCase().includes('evening'))||peaks?.[0];
-    const evePeak=peaks?.find(e=>e.summary?.toLowerCase().includes('evening')||(e.start?.dateTime&&new Date(e.start.dateTime).getHours()>=17));
+    // Match exact RISE event names
+    const allEvents = [...(dips||[]), ...(peaks||[])];
+    const grog     = allEvents.find(e=>e.summary?.toLowerCase().includes('morning grogginess'));
+    const mainPeak = allEvents.find(e=>e.summary?.toLowerCase().includes('morning peak'));
+    const dip      = allEvents.find(e=>e.summary?.toLowerCase().includes('afternoon dip'));
+    const evePeak  = allEvents.find(e=>e.summary?.toLowerCase().includes('evening peak'));
+    const winddown = allEvents.find(e=>e.summary?.toLowerCase().includes('wind-down')||e.summary?.toLowerCase().includes('wind down'));
+    const melatonin= allEvents.find(e=>e.summary?.toLowerCase().includes('melatonin'));
     const shift=roster?.[0];
     const shiftStart=shift?.start?.dateTime?new Date(shift.start.dateTime):null;
     const shiftEnd=shift?.end?.dateTime?new Date(shift.end.dateTime):null;
@@ -554,7 +557,7 @@ async function loadRise(force=false) {
     const dipStart=dip?.start?.dateTime?new Date(dip.start.dateTime):null;
     const grogEnd=grog?.end?.dateTime?new Date(grog.end.dateTime):null;
     // If no RISE peak data at all — show reconnect nudge rather than blank dash
-    const hasRiseData = peaks && peaks.length > 0;
+    const hasRiseData = mainPeak !== undefined;
     let windowText='',rec='',ses='';
     if (!hasRiseData) {
       // Shift known but no RISE data — give shift-based advice using known pattern
@@ -580,10 +583,11 @@ async function loadRise(force=false) {
     }
     const timeline=[];
     if (grog) timeline.push({t:ft(grog.start.dateTime)+'–'+ft(grog.end.dateTime),l:'Grogginess',c:'rp-red'});
-    if (mainPeak) timeline.push({t:ft(mainPeak.start.dateTime)+'–'+ft(mainPeak.end.dateTime),l:'Peak 🔺',c:'rp-green'});
-    if (dip) timeline.push({t:ft(dip.start.dateTime)+'–'+ft(dip.end.dateTime),l:'Dip 📉',c:'rp-amber'});
-    if (evePeak) timeline.push({t:ft(evePeak.start.dateTime)+'–'+ft(evePeak.end.dateTime),l:'Eve Peak',c:'rp-green'});
-    if (winddown) timeline.push({t:ft(winddown.start.dateTime)+'+',l:'Wind-down',c:'rp-muted'});
+    if (mainPeak) timeline.push({t:ft(mainPeak.start.dateTime)+'–'+ft(mainPeak.end.dateTime),l:'Morning Peak 🔺',c:'rp-green'});
+    if (dip) timeline.push({t:ft(dip.start.dateTime)+'–'+ft(dip.end.dateTime),l:'Afternoon Dip 📉',c:'rp-amber'});
+    if (evePeak) timeline.push({t:ft(evePeak.start.dateTime)+'–'+ft(evePeak.end.dateTime),l:'Evening Peak 🔺',c:'rp-green'});
+    if (winddown) timeline.push({t:ft(winddown.start.dateTime)+'–'+ft(winddown.end.dateTime),l:'Wind-down',c:'rp-muted'});
+    if (melatonin) timeline.push({t:ft(melatonin.start.dateTime)+'–'+ft(melatonin.end.dateTime),l:'Melatonin 💤',c:'rp-muted'});
     const shiftBadge=shift?`<span class="rpill rp-muted">${shift.summary}</span>`:`<span class="rpill rp-green">RDO — Day Off</span>`;
     bodyEl.innerHTML=`<div class="rise-body-inner">${shiftBadge}<div style="margin-top:10px"></div><div class="rise-window">Train <em>${windowText||'—'}</em></div><div class="rise-rec">${rec}</div><div class="rise-ses">${ses}</div><div class="rise-pills">${timeline.map(p=>`<div class="rpill ${p.c}">${p.t} ${p.l}</div>`).join('')}</div></div>`;
   } catch(e) {
