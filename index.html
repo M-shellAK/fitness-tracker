@@ -530,6 +530,11 @@ function ft(dt) { if (!dt) return ''; return new Date(dt).toLocaleTimeString('en
 async function loadRise(force=false) {
   const bodyEl = document.getElementById('rise-body');
   if (!isTokenValid()) {
+    // If we have a stored token that's just expired — show a compact reconnect
+    const hadToken = S.accessToken !== null;
+    if (hadToken) {
+      bodyEl.innerHTML = `<div class="rise-body-inner"><div class="rise-window">Session <em>expired</em></div><div class="rise-rec">Your Google session has timed out — tap to reconnect and restore your live RISE + roster data.</div><div class="rise-pills" style="margin-top:10px"><button class="btn-google" style="padding:10px 16px;font-size:14px;max-width:240px" onclick="signIn()"><svg width="16" height="16" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.8 2.3 30.2 0 24 0 14.8 0 6.9 5.4 3 13.3l7.8 6C12.7 13 17.9 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.5c-.5 2.8-2.1 5.1-4.4 6.7l6.9 5.4c4-3.7 6.3-9.2 6.3-16.1z"/><path fill="#FBBC05" d="M10.8 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7L2.5 13.3A23.9 23.9 0 0 0 0 24c0 3.8.9 7.4 2.5 10.6l8.3-5.9z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-6.9-5.4c-2.1 1.4-4.8 2.3-8.3 2.3-6.1 0-11.3-4.1-13.2-9.7l-7.8 6C6.9 42.6 14.8 48 24 48z"/></svg>Reconnect Google</button></div></div>`; return;
+    }
     bodyEl.innerHTML = `<div class="auth-inner"><div class="auth-title">Connect Google Calendar</div><div class="auth-sub">Sign in to see your live RISE energy windows and Air NZ roster every time you open the app.</div><button class="btn-google" onclick="signIn()"><svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.8 2.3 30.2 0 24 0 14.8 0 6.9 5.4 3 13.3l7.8 6C12.7 13 17.9 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.5c-.5 2.8-2.1 5.1-4.4 6.7l6.9 5.4c4-3.7 6.3-9.2 6.3-16.1z"/><path fill="#FBBC05" d="M10.8 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7L2.5 13.3A23.9 23.9 0 0 0 0 24c0 3.8.9 7.4 2.5 10.6l8.3-5.9z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-6.9-5.4c-2.1 1.4-4.8 2.3-8.3 2.3-6.1 0-11.3-4.1-13.2-9.7l-7.8 6C6.9 42.6 14.8 48 24 48z"/></svg>Sign in with Google</button><button class="btn-skip" onclick="showRiseOffline()">Continue without calendar</button></div>`; return;
   }
   bodyEl.innerHTML = '<div class="rise-loading"><span class="spin">⟳</span> Reading your RISE data…</div>';
@@ -548,8 +553,20 @@ async function loadRise(force=false) {
     const peakEnd=mainPeak?.end?.dateTime?new Date(mainPeak.end.dateTime):null;
     const dipStart=dip?.start?.dateTime?new Date(dip.start.dateTime):null;
     const grogEnd=grog?.end?.dateTime?new Date(grog.end.dateTime):null;
+    // If no RISE peak data at all — show reconnect nudge rather than blank dash
+    const hasRiseData = peaks && peaks.length > 0;
     let windowText='',rec='',ses='';
-    if (!shiftStart) {
+    if (!hasRiseData) {
+      // Shift known but no RISE data — give shift-based advice using known pattern
+      if (!shiftStart) {
+        windowText='~9:28am – 12:30pm'; rec='RDO — your typical morning peak window. RISE data not loaded today.'; ses='Recommended: Day A, B, or C';
+      } else if (shiftStart.getHours()<=6) {
+        windowText='Protect your sleep'; rec='Early shift — sleep is the priority. No training before work.'; ses='Rest day — sleep and protein are the work today.';
+      } else {
+        const shiftStr=shiftStart?ft(shiftStart.toISOString()):'';
+        windowText='~9:28am – 11:00am'; rec=`Late shift ${shiftStr} — your typical peak runs until ~12:30pm. RISE data not loaded today.`; ses='Recommended: Day A, B, or C before your shift';
+      }
+    } else if (!shiftStart) {
       if (peakStart&&peakEnd) { const from=grogEnd&&grogEnd>peakStart?grogEnd:peakStart; windowText=`${ft(from.toISOString())} – ${ft(peakEnd.toISOString())}`; rec='RDO — morning peak is completely free. Best window for Day A, B, or C.'; ses='Recommended: Day A, B, or C (full strength session)'; }
     } else if (shiftStart.getHours()<=6) {
       const trainBy=dipStart?new Date(dipStart.getTime()-90*60000):null;
