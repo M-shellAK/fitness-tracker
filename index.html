@@ -488,16 +488,6 @@ const CUSTOM_EX = {
   ],
 };
 
-// ═══ SCHEDULE (next 7 days — built from your roster + RISE pattern) ═══
-const SCHEDULE = [
-  { date:'Sun 1 Jun', roster:'Late', shift:'1200–1800', session:'Recovery — walk & stretch', window:'—', badge:'rp-muted', badgeText:'REST', note:'Last of 6 shifts before your RDO block. Protect energy — light walk only.', proteinNudge:'Late shift — eat a protein lunch before the bus. Shake when home.' },
-  { date:'Mon 2 Jun', roster:'RDO', shift:'Day Off', session:'Day B — Glutes & Quads', window:'10am–12pm', badge:'rp-green', badgeText:'🔺 PEAK', note:'RDO block begins! Morning peak, no time pressure. Hip thrusts, leg press, sumo deadlift.', proteinNudge:'RDO = cook day. Omelette breakfast, post-workout shake, lamb shank dinner.' },
-  { date:'Tue 3 Jun', roster:'RDO', shift:'Day Off', session:'Full Rest', window:'—', badge:'rp-muted', badgeText:'REST', note:'One rest day between strength sessions — non-negotiable. Walk, batch cook, sleep well.', proteinNudge:'Rest day still needs protein — eggs + Greek yoghurt keep you topped up.' },
-  { date:'Wed 4 Jun', roster:'RDO', shift:'Day Off', session:'Day C — Posterior Chain', window:'10am–12pm', badge:'rp-green', badgeText:'🔺 PEAK', note:'Final RDO session. Weeks 3–4 progression — aim to add 2–4kg on lower body lifts.', proteinNudge:'Post-workout shake within 30 min, then a full protein lunch.' },
-  { date:'Thu 5 Jun', roster:'Early', shift:'0500–1200', session:'Rest — protect sleep', window:'Sleep priority', badge:'rp-amber', badgeText:'⚡ EARLY', note:'0500 start. No training before — sleep wins. A short walk after if you have energy.', proteinNudge:'Pre-make a protein breakfast tonight. Shake + boiled eggs are easy pre-shift.' },
-  { date:'Fri 6 Jun', roster:'Early', shift:'0500–1200', session:'KB Quick 20 (optional)', window:'Post-shift ~1pm', badge:'rp-amber', badgeText:'⚡ POST-SHIFT', note:'If energy allows, a short home KB session after your shift — start by 1pm to beat the dip. Otherwise rest.', proteinNudge:'Protein shake post-shift. Omelette or lamb shanks for dinner.' },
-  { date:'Sat 7 Jun', roster:'Late', shift:'1200–1900', session:'Day A — Upper Body', window:'9:30–11am', badge:'rp-green', badgeText:'🔺 PEAK', note:'Morning peak before a late shift. Gym before the bus — strong upper-body day.', proteinNudge:'Protein breakfast before the gym. Shake after. Dinner before work.' },
-];
 // ═══ STATE ═══
 let S = { history:[], prs:{}, accessToken:null, tokenExpiry:0,
           activeWorkout:null, activeExercises:[], timerStart:null,
@@ -759,13 +749,135 @@ function renderProg() {
   }).join('');
 }
 
-// ═══ SCHEDULE ═══
-function renderSchedule() {
-  document.getElementById('schedule-list').innerHTML=SCHEDULE.map((day,i)=>{
-    const isToday=i===0;
-    return `<div class="schedule-day ${isToday?'today':''}"><div class="schedule-day-hdr"><div><div class="schedule-date">${day.date} · ${day.roster}</div><div class="schedule-shift">${day.shift}</div></div>${isToday?'<div class="schedule-today-pill">TODAY</div>':`<div class="rpill ${day.badge}">${day.badgeText}</div>`}</div><div class="schedule-day-body"><div class="schedule-session">${day.session}</div>${day.window!=='—'?`<div class="schedule-window">⏱ ${day.window}</div>`:''}<div class="schedule-note">${day.note}</div><div class="schedule-protein-nudge">🥩 ${day.proteinNudge}</div></div></div>`;
-  }).join('');
+// ═══ SCHEDULE — LIVE FROM CALENDAR ═══
+async function renderSchedule() {
+  const el = document.getElementById('schedule-list');
+  el.innerHTML = '<div class="rise-loading"><span class="spin">⟳</span> Loading your roster…</div>';
+
+  // Build next 7 days from today
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+i);
+    days.push(d);
+  }
+
+  // If no calendar access, fall back to date-only display
+  if (!isTokenValid()) {
+    el.innerHTML = renderScheduleOffline(days); return;
+  }
+
+  try {
+    const tMin = days[0].toISOString();
+    const tMax = new Date(days[6].getTime() + 86399999).toISOString();
+    const [rosterEvents, peakEvents] = await Promise.all([
+      fetchCal(CAL_ROSTER, tMin, tMax),
+      fetchCal(CAL_PEAKS, tMin, tMax)
+    ]);
+
+    el.innerHTML = days.map((day, i) => {
+      const isToday = i === 0;
+      const dayLabel = day.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'});
+
+      // Find roster event for this day
+      const shift = rosterEvents?.find(e => {
+        const eDate = new Date(e.start?.dateTime || e.start?.date);
+        return eDate.toDateString() === day.toDateString();
+      });
+
+      // Find peak for this day
+      const peak = peakEvents?.find(e => {
+        const eDate = new Date(e.start?.dateTime || e.start?.date);
+        return eDate.toDateString() === day.toDateString() && !e.summary?.toLowerCase().includes('evening');
+      });
+
+      // Determine shift details
+      const shiftName = shift?.summary || 'RDO';
+      const isRDO = !shift || shiftName.toLowerCase().includes('rdo') || shift.start?.date;
+      const shiftStart = shift?.start?.dateTime ? new Date(shift.start.dateTime) : null;
+      const shiftEnd   = shift?.end?.dateTime   ? new Date(shift.end.dateTime)   : null;
+      const isEarly    = shiftStart && shiftStart.getHours() <= 6;
+      const isLate     = shiftStart && shiftStart.getHours() >= 11;
+      const shiftStr   = shiftStart && shiftEnd
+        ? `${shiftStart.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit',hour12:false})}–${shiftEnd.toLocaleTimeString('en-NZ',{hour:'2-digit',minute:'2-digit',hour12:false})}`
+        : 'Day Off';
+
+      // Peak window
+      const peakStart = peak?.start?.dateTime ? new Date(peak.start.dateTime) : null;
+      const peakEnd   = peak?.end?.dateTime   ? new Date(peak.end.dateTime)   : null;
+      const peakStr   = peakStart && peakEnd
+        ? `${ft(peakStart.toISOString())} – ${ft(peakEnd.toISOString())}`
+        : '9:28am – 12:30pm';
+
+      // Recommend session + protein nudge based on shift type
+      let session, window, badge, badgeText, note, proteinNudge;
+
+      if (isRDO) {
+        badge='rp-green'; badgeText='🔺 PEAK';
+        window = peakStr;
+        session = 'Priority Training Day';
+        note = 'RDO — morning peak is free. Best window for Day A, B, or C. No time pressure.';
+        proteinNudge = 'RDO = cook day. Omelette breakfast + post-workout shake + batch cook dinner.';
+      } else if (isEarly) {
+        badge='rp-amber'; badgeText='⚡ EARLY';
+        window = 'Protect sleep';
+        session = 'Rest — sleep is the priority';
+        note = `0500 start. No training before work — sleep wins. Post-shift rest if tired, KB Quick 20 if energy allows.`;
+        proteinNudge = 'Prep a protein breakfast tonight. Shake + boiled eggs are easy pre-shift.';
+      } else if (isLate) {
+        const trainEnd = shiftStart ? new Date(shiftStart.getTime()-45*60000) : null;
+        const mins = peakStart && trainEnd ? Math.round((trainEnd-peakStart)/60000) : 0;
+        if (mins >= 60) {
+          badge='rp-green'; badgeText='🔺 PEAK';
+          window = peakStart && trainEnd ? `${ft(peakStart.toISOString())} – ${ft(trainEnd.toISOString())}` : peakStr;
+          session = 'Gym — morning peak before shift';
+          note = `${mins} min peak window before your ${shiftStart ? ft(shiftStart.toISOString()) : ''} shift. Enough for a full session.`;
+          proteinNudge = 'Protein breakfast before the gym. Shake after. Dinner before work.';
+        } else {
+          badge='rp-amber'; badgeText='⚠ SHORT';
+          window = peakStr;
+          session = 'KB Quick 20 or rest';
+          note = 'Short window before late shift. KB Quick 20 at home or rest — don\'t rush a gym session.';
+          proteinNudge = 'Easy protein day — eggs at breakfast, shake mid-morning.';
+        }
+      } else {
+        badge='rp-muted'; badgeText='REST';
+        window = '—';
+        session = 'Rest & Recovery';
+        note = 'Recovery day. Walk, stretch, sleep well.';
+        proteinNudge = 'Rest day protein still matters — Greek yoghurt + eggs keep you on track.';
+      }
+
+      return `<div class="schedule-day ${isToday?'today':''}">
+        <div class="schedule-day-hdr">
+          <div>
+            <div class="schedule-date">${dayLabel}${isRDO?' · RDO':''}</div>
+            <div class="schedule-shift">${shiftStr}</div>
+          </div>
+          ${isToday?'<div class="schedule-today-pill">TODAY</div>':`<div class="rpill ${badge}">${badgeText}</div>`}
+        </div>
+        <div class="schedule-day-body">
+          <div class="schedule-session">${session}</div>
+          ${window!=='—'?`<div class="schedule-window">⏱ ${window}</div>`:''}
+          <div class="schedule-note">${note}</div>
+          <div class="schedule-protein-nudge">🥩 ${proteinNudge}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    el.innerHTML = renderScheduleOffline(days);
+  }
 }
+
+function renderScheduleOffline(days) {
+  return `<div class="rise-loading" style="flex-direction:column;align-items:flex-start;gap:6px">
+    <div style="color:var(--muted);font-size:15px">Sign in with Google to see your live roster here.</div>
+    <div style="color:#555;font-size:13px;font-family:'Barlow Condensed',sans-serif">
+      ${days.map((d,i)=>`<div style="padding:4px 0;border-bottom:1px solid #1a1a1a">${d.toLocaleDateString('en-NZ',{weekday:'short',day:'numeric',month:'short'})}${i===0?' — Today':''}</div>`).join('')}
+    </div>
+  </div>`;
+}
+
 function toggleRehab() { const body=document.getElementById('rehab-body'),chev=document.getElementById('rehab-chev'); const open=body.classList.contains('open'); body.classList.toggle('open',!open); chev.textContent=open?'▾':'▴'; }
 
 // ═══ INIT ═══
